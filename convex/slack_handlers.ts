@@ -127,7 +127,7 @@ export const openOncallModal = internalAction({
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Select a Rootly user and specify the override duration:",
+              text: "Select a Rootly user and specify the override duration.\n\n*What happens next:* An override will be created in Rootly and a confirmation message will be posted to this channel.",
             },
           },
           {
@@ -259,24 +259,76 @@ export const handleModalSubmission = internalMutation({
   args: {
     payload: v.any(), // Slack's view_submission payload
   },
-  returns: v.null(),
+  returns: v.union(
+    v.object({
+      response_action: v.literal("errors"),
+      errors: v.record(v.string(), v.string()),
+    }),
+    v.null()
+  ),
   handler: async (ctx, args) => {
     const view = args.payload.view;
     const values = view.state.values;
     const privateMetadata = JSON.parse(view.private_metadata);
 
-    const selectedRootlyUserId = values.user_block.user_select.selected_option.value;
+    const selectedRootlyUserId = values.user_block.user_select.selected_option?.value;
     const durationStr = values.duration_block.duration_input.value;
 
+    // Validate inputs and show errors in modal if needed
+    const errors: Record<string, string> = {};
+
+    if (!selectedRootlyUserId || selectedRootlyUserId === "error") {
+      errors.user_block = "Please select a valid Rootly user";
+    }
+
+    if (!durationStr || !durationStr.trim()) {
+      errors.duration_block = "Please enter a duration";
+    } else {
+      // Validate duration format
+      const durationMatch = durationStr.trim().match(/^(\d+)([mhd])$/);
+      if (!durationMatch) {
+        errors.duration_block = "Invalid format. Use: 30m, 2h, or 1d";
+      } else {
+        const amount = parseInt(durationMatch[1]);
+        if (amount <= 0) {
+          errors.duration_block = "Duration must be a positive number";
+        }
+      }
+    }
+
+    // If there are validation errors, show them in the modal
+    if (Object.keys(errors).length > 0) {
+      return {
+        response_action: "errors" as const,
+        errors,
+      };
+    }
+
+    // Schedule the override creation
     await ctx.scheduler.runAfter(0, internal.slack_handlers.finalizeModalOverride, {
       rootlyUserId: selectedRootlyUserId,
-      durationStr,
+      durationStr: durationStr.trim(),
       channelId: privateMetadata.channelId,
       requestingSlackUserId: privateMetadata.requestingSlackUserId,
       submittingSlackUserId: args.payload.user.id,
       responseUrl: privateMetadata.responseUrl,
     });
 
+    return null;
+  },
+});
+
+// Handle modal cancellations gracefully
+export const handleModalClosed = internalMutation({
+  args: {
+    payload: v.any(), // Slack's view_closed payload
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Log that user cancelled (optional - helps with analytics)
+    console.log(`Modal cancelled by user ${args.payload.user.id}`);
+
+    // Don't send any messages or take action - user intentionally cancelled
     return null;
   },
 });

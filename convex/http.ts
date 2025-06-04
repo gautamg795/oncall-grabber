@@ -103,6 +103,16 @@ http.route({
             return new Response(null, { status: 200 });
         }
 
+        if (payload.type === "view_closed") {
+            // Handle modal cancellations gracefully
+            await ctx.scheduler.runAfter(0, internal.slack_handlers.handleModalClosed, {
+                payload,
+            });
+
+            // Acknowledge modal closure
+            return new Response(null, { status: 200 });
+        }
+
         if (payload.type === "block_suggestion") {
             // Handle external select menu options loading
             const query = payload.value || "";
