@@ -5,14 +5,6 @@ import { v } from "convex/values";
 const ROOTLY_SCHEDULE_ID = process.env.ROOTLY_SCHEDULE_ID;
 
 // Helper functions
-function parseGrabOncallText(text: string): { durationStr: string; mentionedSlackId: string } | null {
-  const match = text.trim().match(/^(\S+)\s+<@(\w+)(?:\|.*?)?>$/);
-  if (match) {
-    return { durationStr: match[1], mentionedSlackId: match[2] };
-  }
-  return null;
-}
-
 function calculateOverrideTimes(durationStr: string): { startTime: Date; endTime: Date } {
   const now = new Date();
   const endTime = new Date(now);
@@ -65,102 +57,6 @@ async function sendErrorMessage(ctx: any, channelId: string, userId: string, mes
   }
 }
 
-export const processGrabOncallCommand = internalMutation({
-  args: {
-    text: v.string(),
-    slackUserId: v.string(),
-    channelId: v.string(),
-    triggerId: v.string(),
-    responseUrl: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const parsedArgs = parseGrabOncallText(args.text);
-    
-    if (parsedArgs) {
-      // Direct command with arguments
-      await ctx.scheduler.runAfter(0, internal.slack_handlers.handleDirectOverride, {
-        durationStr: parsedArgs.durationStr,
-        mentionedSlackId: parsedArgs.mentionedSlackId,
-        requestingSlackUserId: args.slackUserId,
-        channelId: args.channelId,
-        responseUrl: args.responseUrl,
-      });
-    } else {
-      // No arguments, open modal
-      await ctx.scheduler.runAfter(0, internal.slack_handlers.openOncallModal, {
-        triggerId: args.triggerId,
-        channelId: args.channelId,
-        requestingSlackUserId: args.slackUserId,
-        responseUrl: args.responseUrl,
-      });
-    }
-    
-    return null;
-  },
-});
-
-export const handleDirectOverride = internalAction({
-  args: {
-    durationStr: v.string(),
-    mentionedSlackId: v.string(),
-    requestingSlackUserId: v.string(),
-    channelId: v.string(),
-    responseUrl: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    try {
-      if (!ROOTLY_SCHEDULE_ID) {
-        throw new Error("ROOTLY_SCHEDULE_ID environment variable is not set");
-      }
-
-      // Get Slack user info to find email
-      const slackUser = await ctx.runAction(internal.slack_api.getUserInfo, { 
-        userId: args.mentionedSlackId 
-      });
-      
-      if (!slackUser) {
-        throw new Error(`Could not find email for Slack user <@${args.mentionedSlackId}>.`);
-      }
-
-      // Find Rootly user by email
-      const rootlyUser = await ctx.runAction(internal.rootly_api.findRootlyUserByEmail, { 
-        email: slackUser.email 
-      });
-      
-      if (!rootlyUser) {
-        throw new Error(`Rootly user not found for email: ${slackUser.email}.`);
-      }
-
-      // Calculate override times
-      const { startTime, endTime } = calculateOverrideTimes(args.durationStr);
-
-      // Create Rootly override
-      await ctx.runAction(internal.rootly_api.createRootlyOverride, {
-        rootlyUserId: rootlyUser.id,
-        scheduleId: ROOTLY_SCHEDULE_ID,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-      });
-
-      // Send success message
-      await ctx.runAction(internal.slack_api.sendMessage, {
-        channel: args.channelId,
-        text: `✅ Override created: ${args.durationStr} for <@${args.mentionedSlackId}> (${rootlyUser.attributes.name}). Requested by <@${args.requestingSlackUserId}>.`,
-      });
-
-    } catch (error: any) {
-      console.error("Error in handleDirectOverride:", error);
-      
-      // Send error message with fallback
-      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Error: ${error.message}`);
-    }
-    
-    return null;
-  },
-});
-
 export const openOncallModal = internalAction({
   args: {
     triggerId: v.string(),
@@ -171,24 +67,14 @@ export const openOncallModal = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     try {
-      // Fetch Rootly users for the dropdown
-      const rootlyUsers = await ctx.runAction(internal.rootly_api.listRootlyUsers);
-      
-      const userOptions = rootlyUsers.map((user: any) => ({
-        text: { 
-          type: "plain_text", 
-          text: `${user.attributes.name} (${user.attributes.email})` 
-        },
-        value: user.id,
-      }));
-
+      // Create modal with external select - no need to load users upfront!
       const modalView = {
         type: "modal",
         callback_id: "oncall_override_modal_submit",
         title: { type: "plain_text", text: "Create On-Call Override" },
         submit: { type: "plain_text", text: "Create Override" },
-        private_metadata: JSON.stringify({ 
-          channelId: args.channelId, 
+        private_metadata: JSON.stringify({
+          channelId: args.channelId,
           requestingSlackUserId: args.requestingSlackUserId,
           responseUrl: args.responseUrl,
         }),
@@ -205,10 +91,10 @@ export const openOncallModal = internalAction({
             block_id: "user_block",
             label: { type: "plain_text", text: "Rootly User" },
             element: {
-              type: "static_select",
+              type: "external_select",
               action_id: "user_select",
-              placeholder: { type: "plain_text", text: "Select a user" },
-              options: userOptions,
+              placeholder: { type: "plain_text", text: "Select a user..." },
+              min_query_length: 0,
             },
           },
           {
@@ -235,17 +121,94 @@ export const openOncallModal = internalAction({
 
     } catch (error: any) {
       console.error("Error opening modal:", error);
-      
+
       // Send error message with fallback
       await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Could not open modal: ${error.message}`);
     }
-    
+
     return null;
   },
 });
 
+// New function to handle external select options loading
+export const loadUserSelectOptions = internalAction({
+  args: {
+    query: v.optional(v.string()),
+  },
+  returns: v.object({
+    options: v.array(v.object({
+      text: v.object({
+        type: v.string(),
+        text: v.string(),
+      }),
+      value: v.string(),
+    })),
+  }),
+  handler: async (ctx, args): Promise<{
+    options: Array<{
+      text: {
+        type: string;
+        text: string;
+      };
+      value: string;
+    }>;
+  }> => {
+    try {
+      // Fetch Rootly users
+      const rootlyUsers: Array<{
+        id: string;
+        attributes: {
+          name: string;
+          email: string;
+        };
+      }> = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+
+      // Filter users if there's a query
+      let filteredUsers: typeof rootlyUsers = rootlyUsers;
+      if (args.query && args.query.trim()) {
+        const query = args.query.toLowerCase();
+        filteredUsers = rootlyUsers.filter((user) =>
+          user.attributes.name.toLowerCase().includes(query) ||
+          user.attributes.email.toLowerCase().includes(query)
+        );
+      }
+
+      // Convert to Slack options format
+      const options: Array<{
+        text: {
+          type: string;
+          text: string;
+        };
+        value: string;
+      }> = filteredUsers.slice(0, 100).map((user) => ({
+        text: {
+          type: "plain_text",
+          text: `${user.attributes.name} (${user.attributes.email})`
+        },
+        value: user.id,
+      }));
+
+      return { options };
+
+    } catch (error: any) {
+      console.error("Error loading user select options:", error);
+
+      // Return empty options on error
+      return {
+        options: [{
+          text: {
+            type: "plain_text",
+            text: "Error loading users - please try again"
+          },
+          value: "error",
+        }]
+      };
+    }
+  },
+});
+
 export const handleModalSubmission = internalMutation({
-  args: { 
+  args: {
     payload: v.any(), // Slack's view_submission payload
   },
   returns: v.null(),
@@ -265,7 +228,7 @@ export const handleModalSubmission = internalMutation({
       submittingSlackUserId: args.payload.user.id,
       responseUrl: privateMetadata.responseUrl,
     });
-    
+
     return null;
   },
 });
@@ -297,19 +260,24 @@ export const finalizeModalOverride = internalAction({
         endTime: endTime.toISOString(),
       });
 
+      // Get the Rootly user info for a nicer success message
+      const rootlyUsers = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+      const selectedUser = rootlyUsers.find((user: any) => user.id === args.rootlyUserId);
+      const userName = selectedUser ? selectedUser.attributes.name : args.rootlyUserId;
+
       // Send success message
       await ctx.runAction(internal.slack_api.sendMessage, {
         channel: args.channelId,
-        text: `✅ Override created via modal: ${args.durationStr} for Rootly user ${args.rootlyUserId}.\nRequested by <@${args.requestingSlackUserId}>, submitted by <@${args.submittingSlackUserId}>.`,
+        text: `✅ On-call override created for **${userName}** (${args.durationStr})\nRequested by <@${args.requestingSlackUserId}>`,
       });
 
     } catch (error: any) {
       console.error("Error in finalizeModalOverride:", error);
-      
+
       // Send error message with fallback
-      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Error creating override from modal: ${error.message}`);
+      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Error creating override: ${error.message}`);
     }
-    
+
     return null;
   },
 }); 

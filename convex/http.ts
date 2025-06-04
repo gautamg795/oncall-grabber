@@ -59,23 +59,16 @@ http.route({
         const responseUrl = params.get("response_url")!;
 
         if (command === "/grab-oncall") {
-            // Schedule the command processing to avoid timeout issues
-            await ctx.scheduler.runAfter(0, internal.slack_handlers.processGrabOncallCommand, {
-                text,
-                slackUserId: userId,
-                channelId,
+            // Always open modal - no argument processing
+            await ctx.scheduler.runAfter(0, internal.slack_handlers.openOncallModal, {
                 triggerId,
+                channelId,
+                requestingSlackUserId: userId,
                 responseUrl,
             });
 
-            // Acknowledge immediately
-            return new Response(JSON.stringify({
-                response_type: "ephemeral",
-                text: "Processing your request..."
-            }), {
-                status: 200,
-                headers: { "Content-Type": "application/json" }
-            });
+            // Return empty response for modal opening - no message shown
+            return new Response(null, { status: 200 });
         }
 
         return new Response("Unknown command", { status: 400 });
@@ -108,6 +101,20 @@ http.route({
 
             // Acknowledge modal submission
             return new Response(null, { status: 200 });
+        }
+
+        if (payload.type === "block_suggestion") {
+            // Handle external select menu options loading
+            const query = payload.value || "";
+
+            const result = await ctx.runAction(internal.slack_handlers.loadUserSelectOptions, {
+                query: query || undefined,
+            });
+
+            return new Response(JSON.stringify(result), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
         }
 
         return new Response("Unhandled interaction type", { status: 400 });

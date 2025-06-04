@@ -4,10 +4,10 @@ A Slack slash command `/grab-oncall` that allows engineers to set on-call overri
 
 ## Features
 
-- **Direct Command**: `/grab-oncall 2h @username` - Create override with duration and user mention
-- **Interactive Modal**: `/grab-oncall` - Opens a modal to select Rootly user and specify duration
+- **Interactive Modal Interface**: `/grab-oncall` - Opens a modal to select Rootly user and specify duration
+- **Dynamic User Search**: External select menu loads Rootly users on-demand with search functionality
 - **Rootly Integration**: Automatically creates overrides in your Rootly schedule
-- **Error Handling**: Provides clear feedback for invalid inputs or API failures
+- **Instant Response**: Modal appears immediately for responsive UX
 
 ## Setup Instructions
 
@@ -22,14 +22,15 @@ A Slack slash command `/grab-oncall` that allows engineers to set on-call overri
    - Go to "Slash Commands" in your app settings
    - Click "Create New Command"
    - Command: `/grab-oncall`
-   - Request URL: `https://your-convex-deployment.convex.site/slack/commands`
+   - Request URL: `https://your-convex-deployment.convex.cloud/slack/commands`
    - Short Description: "Create on-call overrides in Rootly"
-   - Usage Hint: `[duration] [@user]` (optional)
+   - Usage Hint: (leave empty)
 
 3. **Enable Interactivity**:
    - Go to "Interactivity & Shortcuts"
    - Enable Interactivity
-   - Request URL: `https://your-convex-deployment.convex.site/slack/interactions`
+   - Request URL: `https://your-convex-deployment.convex.cloud/slack/interactions`
+   - ⚠️ **Important**: This URL is required for the external select menu to work
 
 4. **Set OAuth Scopes**:
    - Go to "OAuth & Permissions"
@@ -90,18 +91,12 @@ A Slack slash command `/grab-oncall` that allows engineers to set on-call overri
 
 ## Usage
 
-### Direct Command
-```
-/grab-oncall 2h @john.doe
-```
-Creates a 2-hour override for the mentioned user.
-
 ### Interactive Modal
 ```
 /grab-oncall
 ```
 Opens a modal where you can:
-- Select a Rootly user from a dropdown
+- Select a Rootly user from a searchable dropdown (loads users dynamically)
 - Specify the duration (e.g., "30m", "2h", "1d")
 
 ### Duration Formats
@@ -111,17 +106,17 @@ Opens a modal where you can:
 
 ## How It Works
 
-1. **Command Processing**: Slack sends the command to Convex HTTP endpoint
-2. **User Lookup**: For direct commands, looks up Slack user email and finds matching Rootly user
+1. **Command Processing**: `/grab-oncall` immediately opens a modal (no loading delay)
+2. **User Selection**: Click dropdown to load Rootly users dynamically with search
 3. **Override Creation**: Calls Rootly API to create the schedule override
-4. **Confirmation**: Sends success/error message back to Slack
+4. **Confirmation**: Sends success/error message back to Slack channel
 
 ## Architecture
 
 ```
-Slack → Convex HTTP → Slack Handlers → Rootly API
-                   ↓
-              Convex Database (Schedule Config)
+Slack → Convex HTTP → Modal Display → External Select → Rootly API
+                                   ↓
+                            Override Creation
 ```
 
 ## File Structure
@@ -161,8 +156,8 @@ convex/
    - Monitor Slack app event logs
 
 3. **Testing**:
-   - Test direct commands: `/grab-oncall 1h @testuser`
    - Test modal flow: `/grab-oncall`
+   - Verify external select loads users correctly
    - Verify Rootly overrides are created correctly
 
 ## Troubleshooting
@@ -173,15 +168,20 @@ convex/
    - Check `SLACK_SIGNING_SECRET` is correct
    - Ensure Slack app URLs point to correct Convex deployment
 
-2. **"Rootly user not found"**:
-   - Verify user's Slack email matches Rootly email
-   - Check Rootly API key permissions
+2. **"No result" in user dropdown**:
+   - Verify Interactivity Request URL is set correctly in Slack app
+   - Check Convex logs for `block_suggestion` request errors
+   - Ensure `ROOTLY_API_KEY` has correct permissions
 
-3. **"Modal not opening"**:
+3. **"Rootly user not found"**:
+   - Verify Rootly API key permissions
+   - Check if Rootly users have proper email addresses
+
+4. **"Modal not opening"**:
    - Check `trigger_id` is valid (expires after 3 seconds)
    - Verify Interactivity URL is correct
 
-4. **"Environment variable not set"**:
+5. **"Environment variable not set"**:
    - Run `npx convex env list` to check variables
    - Redeploy after setting new variables
 
