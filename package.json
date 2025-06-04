@@ -1,0 +1,18 @@
+{
+  "name": "grab-oncall",
+  "version": "1.0.0",
+  "description": "Slack command for managing Rootly on-call overrides",
+  "main": "index.js",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy"
+  },
+  "dependencies": {
+    "convex": "^1.24.8",
+    "@slack/web-api": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  }
+}
