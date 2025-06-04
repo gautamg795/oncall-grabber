@@ -67,7 +67,51 @@ export const openOncallModal = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     try {
-      // Create modal with external select - no need to load users upfront!
+      // Try to find the current user in Rootly to pre-populate the dropdown
+      let initialOption = undefined;
+
+      try {
+        // Get current user's Slack info to find their email
+        const currentSlackUser = await ctx.runAction(internal.slack_api.getUserInfo, {
+          userId: args.requestingSlackUserId
+        });
+
+        if (currentSlackUser && currentSlackUser.email) {
+          // Try to find them in Rootly
+          const currentRootlyUser = await ctx.runAction(internal.rootly_api.findRootlyUserByEmail, {
+            email: currentSlackUser.email
+          });
+
+          if (currentRootlyUser) {
+            // Set as initial option if found
+            initialOption = {
+              text: {
+                type: "plain_text",
+                text: `${currentRootlyUser.attributes.name} (${currentRootlyUser.attributes.email})`
+              },
+              value: currentRootlyUser.id,
+            };
+          }
+        }
+      } catch (error) {
+        // If we can't find the current user, just continue without initial option
+        console.log("Could not pre-populate current user, continuing with empty dropdown:", error);
+      }
+
+      // Create the external select element
+      const userSelectElement: any = {
+        type: "external_select",
+        action_id: "user_select",
+        placeholder: { type: "plain_text", text: "Select a user..." },
+        min_query_length: 0,
+      };
+
+      // Add initial option if we found the current user
+      if (initialOption) {
+        userSelectElement.initial_option = initialOption;
+      }
+
+      // Create modal with external select
       const modalView = {
         type: "modal",
         callback_id: "oncall_override_modal_submit",
@@ -87,15 +131,19 @@ export const openOncallModal = internalAction({
             },
           },
           {
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `⏰ Current time: <!date^${Math.floor(Date.now() / 1000)}^{time}|${new Date().toLocaleTimeString()}> on <!date^${Math.floor(Date.now() / 1000)}^{date_short}|${new Date().toLocaleDateString()}>`
+              }
+            ]
+          },
+          {
             type: "input",
             block_id: "user_block",
             label: { type: "plain_text", text: "Rootly User" },
-            element: {
-              type: "external_select",
-              action_id: "user_select",
-              placeholder: { type: "plain_text", text: "Select a user..." },
-              min_query_length: 0,
-            },
+            element: userSelectElement,
           },
           {
             type: "input",
@@ -268,7 +316,7 @@ export const finalizeModalOverride = internalAction({
       // Send success message
       await ctx.runAction(internal.slack_api.sendMessage, {
         channel: args.channelId,
-        text: `✅ On-call override created for **${userName}** (${args.durationStr})\nRequested by <@${args.requestingSlackUserId}>`,
+        text: `✅ On-call override created for **${userName}** (${args.durationStr})\n⏰ Start: <!date^${Math.floor(startTime.getTime() / 1000)}^{time} on {date_short}|${startTime.toLocaleString()}>\n⏰ End: <!date^${Math.floor(endTime.getTime() / 1000)}^{time} on {date_short}|${endTime.toLocaleString()}>\nRequested by <@${args.requestingSlackUserId}>`,
       });
 
     } catch (error: any) {
