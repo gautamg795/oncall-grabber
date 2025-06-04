@@ -77,10 +77,11 @@ export const openOncallModal = internalAction({
         });
 
         if (currentSlackUser && currentSlackUser.email) {
-          // Try to find them in Rootly
-          const currentRootlyUser = await ctx.runAction(internal.rootly_api.findRootlyUserByEmail, {
-            email: currentSlackUser.email
-          });
+          // Get all Rootly users and find the current user by email
+          const rootlyUsers = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+          const currentRootlyUser = rootlyUsers.find((user: any) =>
+            user.attributes.email.toLowerCase() === currentSlackUser.email.toLowerCase()
+          );
 
           if (currentRootlyUser) {
             // Set as initial option if found

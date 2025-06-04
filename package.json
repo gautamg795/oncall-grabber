@@ -8,8 +8,9 @@
     "deploy": "convex deploy"
   },
   "dependencies": {
-    "convex": "^1.24.8",
-    "@slack/web-api": "^7.0.2"
+    "@convex-dev/action-cache": "^0.2.9",
+    "@slack/web-api": "^7.0.2",
+    "convex": "^1.24.8"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
