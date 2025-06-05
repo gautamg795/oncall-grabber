@@ -151,11 +151,20 @@ convex/
    npm run dev
    ```
 
-2. **View Logs**:
+2. **Linting**:
+   - **Check code**: `npm run lint`
+   - **Auto-fix issues**: `npm run lint:fix`
+   
+   The project uses ESLint with Convex-specific rules that enforce best practices like:
+   - Using argument validators in Convex functions
+   - Proper object syntax for registered functions
+   - TypeScript best practices
+
+3. **View Logs**:
    - Check Convex dashboard for function logs
    - Monitor Slack app event logs
 
-3. **Testing**:
+4. **Testing**:
    - Test modal flow: `/grab-oncall`
    - Verify external select loads users correctly
    - Verify Rootly overrides are created correctly

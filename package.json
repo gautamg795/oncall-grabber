@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "description": "Slack command for managing Rootly on-call overrides",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "convex dev",
-    "deploy": "convex deploy"
+    "deploy": "convex deploy",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@convex-dev/action-cache": "^0.2.9",
@@ -13,7 +16,11 @@
     "convex": "^1.24.8"
   },
   "devDependencies": {
+    "@convex-dev/eslint-plugin": "^0.0.1-alpha.4",
     "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "^8.33.1",
+    "@typescript-eslint/parser": "^8.33.1",
+    "eslint": "^9.28.0",
     "typescript": "^5.3.3"
   }
 }

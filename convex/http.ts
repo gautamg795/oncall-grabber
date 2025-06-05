@@ -52,7 +52,6 @@ http.route({
 
         const params = new URLSearchParams(rawBodyText);
         const command = params.get("command");
-        const text = params.get("text") || "";
         const userId = params.get("user_id")!;
         const channelId = params.get("channel_id")!;
         const triggerId = params.get("trigger_id")!;

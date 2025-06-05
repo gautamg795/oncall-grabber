@@ -7,18 +7,6 @@ import { components } from "./_generated/api";
 const ROOTLY_API_KEY = process.env.ROOTLY_API_KEY;
 const ROOTLY_API_BASE_URL = "https://api.rootly.com/v1";
 
-// Simple interface for what we actually need from Rootly users
-const RootlyUserValidator = v.object({
-    id: v.string(),
-    attributes: v.object({
-        name: v.string(),
-        email: v.string(),
-    }),
-    // Everything else we don't care about
-    type: v.optional(v.any()),
-    relationships: v.optional(v.any()),
-});
-
 // Uncached version - this does the actual API call to Rootly
 export const listRootlyUsersUncached = internalAction({
     args: {},
@@ -31,7 +19,7 @@ export const listRootlyUsersUncached = internalAction({
             }),
         })
     ),
-    handler: async (ctx, args) => {
+    handler: async (_ctx, _args) => {
         if (!ROOTLY_API_KEY) {
             throw new Error("ROOTLY_API_KEY environment variable is not set");
         }
@@ -52,7 +40,7 @@ export const listRootlyUsersUncached = internalAction({
         const result = await response.json();
 
         // Extract only what we need from each user
-        return (result.data || []).map((user: any) => ({
+        return (result.data || []).map((user: { id: string; attributes: { name: string; email: string } }) => ({
             id: user.id,
             attributes: {
                 name: user.attributes.name,
@@ -80,7 +68,7 @@ export const listRootlyUsers = internalAction({
             }),
         })
     ),
-    handler: async (ctx, args): Promise<Array<{
+    handler: async (ctx, _args): Promise<Array<{
         id: string;
         attributes: {
             name: string;

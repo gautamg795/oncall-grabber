@@ -1,8 +1,34 @@
 import { internalMutation, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import type { ExternalSelect } from "@slack/web-api";
+import type { FunctionReference } from "convex/server";
 
 const ROOTLY_SCHEDULE_ID = process.env.ROOTLY_SCHEDULE_ID;
+
+// Type definitions for better type safety
+interface ConvexActionContext {
+  runAction: <T>(
+    action: FunctionReference<"action", "internal", any, T>, // eslint-disable-line @typescript-eslint/no-explicit-any 
+    args: Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  ) => Promise<T>;
+}
+
+interface RootlyUser {
+  id: string;
+  attributes: {
+    name: string;
+    email: string;
+  };
+}
+
+interface SlackSelectOption {
+  text: {
+    type: string;
+    text: string;
+  };
+  value: string;
+}
 
 // Helper functions
 function calculateOverrideTimes(durationStr: string): { startTime: Date; endTime: Date } {
@@ -33,7 +59,12 @@ function calculateOverrideTimes(durationStr: string): { startTime: Date; endTime
 }
 
 // Helper to safely send error messages
-async function sendErrorMessage(ctx: any, channelId: string, userId: string, message: string) {
+async function sendErrorMessage(
+  ctx: ConvexActionContext,
+  channelId: string,
+  userId: string,
+  message: string
+) {
   try {
     // Try ephemeral message first
     await ctx.runAction(internal.slack_api.sendEphemeralMessage, {
@@ -41,16 +72,18 @@ async function sendErrorMessage(ctx: any, channelId: string, userId: string, mes
       user: userId,
       text: message,
     });
-  } catch (error: any) {
-    console.error("Failed to send ephemeral message, trying DM instead:", error);
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Failed to send ephemeral message, trying DM instead:", errorMsg);
     try {
       // Fallback to DM if bot isn't in channel
       await ctx.runAction(internal.slack_api.sendDirectMessage, {
         userId: userId,
         text: message,
       });
-    } catch (dmError: any) {
-      console.error("Failed to send DM as well:", dmError);
+    } catch (dmError: unknown) {
+      const dmErrorMsg = dmError instanceof Error ? dmError.message : 'Unknown error';
+      console.error("Failed to send DM as well:", dmErrorMsg);
       // Last resort: just log the error
       console.error("Original error message that couldn't be delivered:", message);
     }
@@ -78,16 +111,16 @@ export const openOncallModal = internalAction({
 
         if (currentSlackUser && currentSlackUser.email) {
           // Get all Rootly users and find the current user by email
-          const rootlyUsers = await ctx.runAction(internal.rootly_api.listRootlyUsers);
-          const currentRootlyUser = rootlyUsers.find((user: any) =>
-            user.attributes.email.toLowerCase() === currentSlackUser.email.toLowerCase()
+          const rootlyUsers: RootlyUser[] = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+          const currentRootlyUser = rootlyUsers.find((user: RootlyUser) =>
+            user.attributes.email.toLowerCase() === currentSlackUser.email!.toLowerCase()
           );
 
           if (currentRootlyUser) {
             // Set as initial option if found
             initialOption = {
               text: {
-                type: "plain_text",
+                type: "plain_text" as const,
                 text: `${currentRootlyUser.attributes.name} (${currentRootlyUser.attributes.email})`
               },
               value: currentRootlyUser.id,
@@ -100,7 +133,7 @@ export const openOncallModal = internalAction({
       }
 
       // Create the external select element
-      const userSelectElement: any = {
+      const userSelectElement: ExternalSelect = {
         type: "external_select",
         action_id: "user_select",
         placeholder: { type: "plain_text", text: "Select a user..." },
@@ -168,11 +201,12 @@ export const openOncallModal = internalAction({
         view: modalView,
       });
 
-    } catch (error: any) {
-      console.error("Error opening modal:", error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error opening modal:", errorMsg);
 
       // Send error message with fallback
-      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Could not open modal: ${error.message}`);
+      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Could not open modal: ${errorMsg}`);
     }
 
     return null;
@@ -204,16 +238,10 @@ export const loadUserSelectOptions = internalAction({
   }> => {
     try {
       // Fetch Rootly users
-      const rootlyUsers: Array<{
-        id: string;
-        attributes: {
-          name: string;
-          email: string;
-        };
-      }> = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+      const rootlyUsers: RootlyUser[] = await ctx.runAction(internal.rootly_api.listRootlyUsers);
 
       // Filter users if there's a query
-      let filteredUsers: typeof rootlyUsers = rootlyUsers;
+      let filteredUsers: RootlyUser[] = rootlyUsers;
       if (args.query && args.query.trim()) {
         const query = args.query.toLowerCase();
         filteredUsers = rootlyUsers.filter((user) =>
@@ -223,13 +251,7 @@ export const loadUserSelectOptions = internalAction({
       }
 
       // Convert to Slack options format
-      const options: Array<{
-        text: {
-          type: string;
-          text: string;
-        };
-        value: string;
-      }> = filteredUsers.slice(0, 100).map((user) => ({
+      const options: SlackSelectOption[] = filteredUsers.slice(0, 100).map((user) => ({
         text: {
           type: "plain_text",
           text: `${user.attributes.name} (${user.attributes.email})`
@@ -239,8 +261,9 @@ export const loadUserSelectOptions = internalAction({
 
       return { options };
 
-    } catch (error: any) {
-      console.error("Error loading user select options:", error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error loading user select options:", errorMsg);
 
       // Return empty options on error
       return {
@@ -258,7 +281,7 @@ export const loadUserSelectOptions = internalAction({
 
 export const handleModalSubmission = internalMutation({
   args: {
-    payload: v.any(), // Slack's view_submission payload
+    payload: v.any(), // Slack's view_submission payload - complex structure we access with known paths
   },
   returns: v.union(
     v.object({
@@ -325,7 +348,7 @@ export const handleModalClosed = internalMutation({
     payload: v.any(), // Slack's view_closed payload
   },
   returns: v.null(),
-  handler: async (ctx, args) => {
+  handler: async (_ctx, args) => {
     // Log that user cancelled (optional - helps with analytics)
     console.log(`Modal cancelled by user ${args.payload.user.id}`);
 
@@ -362,8 +385,8 @@ export const finalizeModalOverride = internalAction({
       });
 
       // Get the Rootly user info for a nicer success message
-      const rootlyUsers = await ctx.runAction(internal.rootly_api.listRootlyUsers);
-      const selectedUser = rootlyUsers.find((user: any) => user.id === args.rootlyUserId);
+      const rootlyUsers: RootlyUser[] = await ctx.runAction(internal.rootly_api.listRootlyUsers);
+      const selectedUser = rootlyUsers.find((user: RootlyUser) => user.id === args.rootlyUserId);
       const userName = selectedUser ? selectedUser.attributes.name : args.rootlyUserId;
 
       // Send success message
@@ -372,11 +395,12 @@ export const finalizeModalOverride = internalAction({
         text: `✅ On-call override created for **${userName}** (${args.durationStr})\n⏰ Start: <!date^${Math.floor(startTime.getTime() / 1000)}^{time} on {date_short}|${startTime.toLocaleString()}>\n⏰ End: <!date^${Math.floor(endTime.getTime() / 1000)}^{time} on {date_short}|${endTime.toLocaleString()}>\nRequested by <@${args.requestingSlackUserId}>`,
       });
 
-    } catch (error: any) {
-      console.error("Error in finalizeModalOverride:", error);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error in finalizeModalOverride:", errorMsg);
 
       // Send error message with fallback
-      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Error creating override: ${error.message}`);
+      await sendErrorMessage(ctx, args.channelId, args.requestingSlackUserId, `❌ Error creating override: ${errorMsg}`);
     }
 
     return null;
