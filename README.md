@@ -23,10 +23,10 @@ Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps):
 
 ```bash
 npm install
-npx convex env set SLACK_BOT_TOKEN "xoxb-..."
-npx convex env set SLACK_SIGNING_SECRET "..."
-npx convex env set ROOTLY_API_KEY "..."
-npx convex env set ROOTLY_SCHEDULE_ID "..."
+npx convex env set --prod SLACK_BOT_TOKEN "xoxb-..."
+npx convex env set --prod SLACK_SIGNING_SECRET "..."
+npx convex env set --prod ROOTLY_API_KEY "..."
+npx convex env set --prod ROOTLY_SCHEDULE_ID "..."
 npx convex deploy
 ```
 
