@@ -32,9 +32,9 @@ interface SlackSelectOption {
 }
 
 // Helper functions
-function calculateOverrideTimes(durationStr: string): { startTime: Date; endTime: Date } {
-  const now = new Date();
-  const endTime = new Date(now);
+function calculateOverrideTimes(durationStr: string, startTimeUnix: number): { startTime: Date; endTime: Date } {
+  const startTime = new Date(startTimeUnix * 1000); // Convert Unix timestamp to Date
+  const endTime = new Date(startTime);
   const amount = parseInt(durationStr.slice(0, -1));
   const unit = durationStr.slice(-1).toLowerCase();
 
@@ -44,19 +44,19 @@ function calculateOverrideTimes(durationStr: string): { startTime: Date; endTime
 
   switch (unit) {
     case 'm':
-      endTime.setMinutes(now.getMinutes() + amount);
+      endTime.setMinutes(startTime.getMinutes() + amount);
       break;
     case 'h':
-      endTime.setHours(now.getHours() + amount);
+      endTime.setHours(startTime.getHours() + amount);
       break;
     case 'd':
-      endTime.setDate(now.getDate() + amount);
+      endTime.setDate(startTime.getDate() + amount);
       break;
     default:
       throw new Error("Invalid duration unit. Use m (minutes), h (hours), or d (days).");
   }
 
-  return { startTime: now, endTime };
+  return { startTime, endTime };
 }
 
 // Helper to safely send error messages
@@ -182,6 +182,16 @@ export const openOncallModal = internalAction({
           },
           {
             type: "input",
+            block_id: "start_time_block",
+            label: { type: "plain_text", text: "Start Time" },
+            element: {
+              type: "datetimepicker",
+              action_id: "start_time_input",
+              initial_date_time: Math.floor(Date.now() / 1000 / 60) * 60, // Round to nearest minute
+            },
+          },
+          {
+            type: "input",
             block_id: "duration_block",
             label: { type: "plain_text", text: "Duration" },
             element: {
@@ -298,12 +308,17 @@ export const handleModalSubmission = internalMutation({
 
     const selectedRootlyUserId = values.user_block.user_select.selected_option?.value;
     const durationStr = values.duration_block.duration_input.value;
+    const startTimeUnix = values.start_time_block.start_time_input.selected_date_time;
 
     // Validate inputs and show errors in modal if needed
     const errors: Record<string, string> = {};
 
     if (!selectedRootlyUserId || selectedRootlyUserId === "error") {
       errors.user_block = "Please select a valid Rootly user";
+    }
+
+    if (!startTimeUnix) {
+      errors.start_time_block = "Please select a start time";
     }
 
     if (!durationStr || !durationStr.trim()) {
@@ -333,6 +348,7 @@ export const handleModalSubmission = internalMutation({
     await ctx.scheduler.runAfter(0, internal.slack_handlers.finalizeModalOverride, {
       rootlyUserId: selectedRootlyUserId,
       durationStr: durationStr.trim(),
+      startTimeUnix: startTimeUnix,
       channelId: privateMetadata.channelId,
       requestingSlackUserId: privateMetadata.requestingSlackUserId,
       submittingSlackUserId: args.payload.user.id,
@@ -362,6 +378,7 @@ export const finalizeModalOverride = internalAction({
   args: {
     rootlyUserId: v.string(),
     durationStr: v.string(),
+    startTimeUnix: v.number(),
     channelId: v.string(),
     requestingSlackUserId: v.string(),
     submittingSlackUserId: v.string(),
@@ -375,7 +392,7 @@ export const finalizeModalOverride = internalAction({
       }
 
       // Calculate override times
-      const { startTime, endTime } = calculateOverrideTimes(args.durationStr);
+      const { startTime, endTime } = calculateOverrideTimes(args.durationStr, args.startTimeUnix);
 
       // Create Rootly override
       await ctx.runAction(internal.rootly_api.createRootlyOverride, {
