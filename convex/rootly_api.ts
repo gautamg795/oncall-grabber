@@ -6,6 +6,7 @@ import { components } from "./_generated/api";
 
 const ROOTLY_API_KEY = process.env.ROOTLY_API_KEY;
 const ROOTLY_API_BASE_URL = "https://api.rootly.com/v1";
+const ROOTLY_CACHE_TTL = 60 * 60 * 1000;
 
 // Uncached version - this does the actual API call to Rootly
 export const listRootlyUsersUncached = internalAction({
@@ -19,7 +20,7 @@ export const listRootlyUsersUncached = internalAction({
             }),
         })
     ),
-    handler: async (_ctx, _args) => {
+    handler: async (ctx, _args) => {
         if (!ROOTLY_API_KEY) {
             throw new Error("ROOTLY_API_KEY environment variable is not set");
         }
@@ -39,6 +40,8 @@ export const listRootlyUsersUncached = internalAction({
 
         const result = await response.json();
 
+        // Schedule a refresh of the cache right after it would expire
+        await ctx.scheduler.runAfter(ROOTLY_CACHE_TTL + 1000, internal.rootly_api.listRootlyUsers, {});
         // Extract only what we need from each user
         return (result.data || []).map((user: { id: string; attributes: { name: string; email: string } }) => ({
             id: user.id,
@@ -54,6 +57,7 @@ export const listRootlyUsersUncached = internalAction({
 const rootlyUsersCache = new ActionCache(components.actionCache, {
     action: internal.rootly_api.listRootlyUsersUncached,
     name: "rootly-users-v1",
+    ttl: ROOTLY_CACHE_TTL,
 }) as ActionCache<typeof internal.rootly_api.listRootlyUsersUncached>;
 
 // Cached version - this is what we'll use everywhere
@@ -76,8 +80,7 @@ export const listRootlyUsers = internalAction({
         };
     }>> => {
         // Use cache with 1 hour TTL
-        console.log("Fetching Rootly users (cache-enabled)");
-        return await rootlyUsersCache.fetch(ctx, {}, { ttl: 60 * 60 * 1000 });
+        return await rootlyUsersCache.fetch(ctx, {});
     },
 });
 

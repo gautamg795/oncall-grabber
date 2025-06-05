@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { ExternalSelect } from "@slack/web-api";
 import type { FunctionReference } from "convex/server";
+import { ActionCache } from "@convex-dev/action-cache";
+import { components } from "./_generated/api";
 
 const ROOTLY_SCHEDULE_ID = process.env.ROOTLY_SCHEDULE_ID;
 const ONCALL_NOTIFICATION_CHANNEL = process.env.ONCALL_NOTIFICATION_CHANNEL;
@@ -91,6 +93,25 @@ async function sendErrorMessage(
   }
 }
 
+const SlackUserInfoCache = new ActionCache(components.actionCache, {
+  action: internal.slack_api.getUserInfo,
+  name: "slack-user-info",
+  ttl: 7 * 24 * 60 * 60 * 1000, // 7 days
+}) as ActionCache<typeof internal.slack_api.getUserInfo>;
+
+export const getSlackUserInfo = internalAction({
+  args: {
+    userId: v.string(),
+  },
+  returns: v.union(v.object({
+    email: v.string(),
+    name: v.string(),
+  }), v.null()),
+  handler: async (ctx, args): Promise<{ email: string, name: string } | null> => {
+    return await SlackUserInfoCache.fetch(ctx, args);
+  },
+});
+
 export const openOncallModal = internalAction({
   args: {
     triggerId: v.string(),
@@ -106,7 +127,7 @@ export const openOncallModal = internalAction({
 
       try {
         // Get current user's Slack info to find their email
-        const currentSlackUser = await ctx.runAction(internal.slack_api.getUserInfo, {
+        const currentSlackUser = await ctx.runAction(internal.slack_handlers.getSlackUserInfo, {
           userId: args.requestingSlackUserId
         });
 
