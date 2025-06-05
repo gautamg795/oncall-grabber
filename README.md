@@ -1,5 +1,5 @@
 # Grab On-Call Slack Command
-<img src="https://github.com/user-attachments/assets/c809d72f-b319-4c7a-a82c-f337ee4c924f"  width="200">
+<img src="https://github.com/user-attachments/assets/c0d8c826-2726-46c4-9c0c-5aa3364c0c3e">
 
 
 Slack slash command that creates Rootly on-call overrides directly from Slack.
