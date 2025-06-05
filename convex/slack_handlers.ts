@@ -162,7 +162,7 @@ export const openOncallModal = internalAction({
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Select a Rootly user and specify the override duration.\n\n*What happens next:* An override will be created in Rootly and a confirmation message will be posted to this channel.",
+              text: `Select a Rootly user and specify the override duration.\n\n*What happens next:* An override will be created in Rootly and a confirmation message will be posted${ONCALL_NOTIFICATION_CHANNEL ? ` to ${ONCALL_NOTIFICATION_CHANNEL}` : ' to this channel'}.`,
             },
           },
           {
