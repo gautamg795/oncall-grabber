@@ -5,6 +5,7 @@ import type { ExternalSelect } from "@slack/web-api";
 import type { FunctionReference } from "convex/server";
 
 const ROOTLY_SCHEDULE_ID = process.env.ROOTLY_SCHEDULE_ID;
+const ONCALL_NOTIFICATION_CHANNEL = process.env.ONCALL_NOTIFICATION_CHANNEL;
 
 // Type definitions for better type safety
 interface ConvexActionContext {
@@ -389,9 +390,10 @@ export const finalizeModalOverride = internalAction({
       const selectedUser = rootlyUsers.find((user: RootlyUser) => user.id === args.rootlyUserId);
       const userName = selectedUser ? selectedUser.attributes.name : args.rootlyUserId;
 
-      // Send success message
+      // Send success message to configured notification channel (or fallback to original channel)
+      const notificationChannel = ONCALL_NOTIFICATION_CHANNEL || args.channelId;
       await ctx.runAction(internal.slack_api.sendMessage, {
-        channel: args.channelId,
+        channel: notificationChannel,
         text: `✅ On-call override created for **${userName}** (${args.durationStr})\n⏰ Start: <!date^${Math.floor(startTime.getTime() / 1000)}^{time} on {date_short}|${startTime.toLocaleString()}>\n⏰ End: <!date^${Math.floor(endTime.getTime() / 1000)}^{time} on {date_short}|${endTime.toLocaleString()}>\nRequested by <@${args.requestingSlackUserId}>`,
       });
 

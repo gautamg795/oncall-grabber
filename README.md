@@ -27,6 +27,7 @@ npx convex env set --prod SLACK_BOT_TOKEN "xoxb-..."
 npx convex env set --prod SLACK_SIGNING_SECRET "..."
 npx convex env set --prod ROOTLY_API_KEY "..."
 npx convex env set --prod ROOTLY_SCHEDULE_ID "..."
+npx convex env set --prod ONCALL_NOTIFICATION_CHANNEL "#oncall-updates"
 npx convex deploy
 ```
 
@@ -58,6 +59,7 @@ npm run lint:fix     # Auto-fix issues
 | `SLACK_SIGNING_SECRET` | Slack app Basic Info | `abc123def456` |
 | `ROOTLY_API_KEY` | Rootly Settings | `rootly_api_key_123` |
 | `ROOTLY_SCHEDULE_ID` | Rootly schedule URL | `schedule_456` |
+| `ONCALL_NOTIFICATION_CHANNEL` | Slack channel name | `#oncall-updates` |
 
 ## Troubleshooting
 
