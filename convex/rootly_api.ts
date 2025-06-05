@@ -50,7 +50,7 @@ export const listRootlyUsersUncached = internalAction({
     },
 });
 
-// Create a cache for Rootly users with 5-minute TTL
+// Create a cache for Rootly users 
 const rootlyUsersCache = new ActionCache(components.actionCache, {
     action: internal.rootly_api.listRootlyUsersUncached,
     name: "rootly-users-v1",
@@ -75,9 +75,9 @@ export const listRootlyUsers = internalAction({
             email: string;
         };
     }>> => {
-        // Use cache with 5-minute TTL (300 seconds)
+        // Use cache with 1 hour TTL
         console.log("Fetching Rootly users (cache-enabled)");
-        return await rootlyUsersCache.fetch(ctx, {}, { ttl: 5 * 60 * 1000 });
+        return await rootlyUsersCache.fetch(ctx, {}, { ttl: 60 * 60 * 1000 });
     },
 });
 
